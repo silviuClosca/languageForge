@@ -39,17 +39,13 @@ class DashboardView(QWidget):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
 
-        # Slightly larger base font for better readability, similar to decks view.
-        base_font: QFont = self.font()
-        if base_font.pointSize() > 0:
-            base_font.setPointSize(base_font.pointSize() + 4)
-            self.setFont(base_font)
-
         # Archive past goals once per session when the dashboard is created.
         auto_archive_past_goals(get_current_month_id())
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 0, 10, 0)
+        # Remove outer horizontal margins so the dashboard cards sit flush with
+        # the dock content area (no grey gutters on the left/right).
+        layout.setContentsMargins(0, 0, 0, 0)
         # Reduce spacing between section boxes so they appear closer together.
         layout.setSpacing(0)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -59,19 +55,6 @@ class DashboardView(QWidget):
         layout.addWidget(self._create_goals_section())
         layout.addWidget(self._create_resources_section())
         layout.addStretch(1)
-
-        # Auto-start checkbox at the bottom of the dashboard
-        footer = QHBoxLayout()
-        footer.addStretch(1)
-        self.auto_start_checkbox = QCheckBox(
-            "Open FluencyForge automatically when Anki starts", self
-        )
-        # Initialize from DailyPlan
-        plan: DailyPlan = load_daily_plan()
-        self.auto_start_checkbox.setChecked(plan.show_on_startup)
-        self.auto_start_checkbox.toggled.connect(self._on_auto_start_toggled)
-        footer.addWidget(self.auto_start_checkbox)
-        layout.addLayout(footer)
 
     # helpers to reach main window and tabs
     def _main_window(self):
@@ -85,16 +68,35 @@ class DashboardView(QWidget):
     def _create_section_frame(self, title: str) -> QFrame:
         frame = QFrame(self)
         try:
-            frame.setFrameShape(QFrame.Shape.StyledPanel)
-            frame.setFrameShadow(QFrame.Shadow.Raised)
+            frame.setFrameShape(QFrame.Shape.NoFrame)
+            frame.setFrameShadow(QFrame.Shadow.Plain)
         except AttributeError:
-            frame.setFrameShape(QFrame.StyledPanel)  # type: ignore[attr-defined]
-            frame.setFrameShadow(QFrame.Raised)  # type: ignore[attr-defined]
+            frame.setFrameShape(QFrame.NoFrame)  # type: ignore[attr-defined]
+            frame.setFrameShadow(QFrame.Plain)  # type: ignore[attr-defined]
+        # Remove the box border and give the section a subtle rounded corner
+        # background so the cards feel softer.
+        frame.setStyleSheet(
+            "border: none; border-radius: 8px; background-color: transparent;"
+        )
         v = QVBoxLayout(frame)
         v.setContentsMargins(8, 8, 8, 8)
         v.setSpacing(6)
-        header = QLabel(f"<b>{title}</b>")
-        v.addWidget(header)
+        header_row = QHBoxLayout()
+        header_label = QLabel(f"<b>{title}</b>")
+        header_row.addWidget(header_label)
+        header_row.addStretch(1)
+        v.addLayout(header_row)
+        # Grey underline under the section title, spanning the card width.
+        underline = QFrame(frame)
+        try:
+            underline.setFrameShape(QFrame.Shape.HLine)
+            underline.setFrameShadow(QFrame.Shadow.Plain)
+        except AttributeError:
+            underline.setFrameShape(QFrame.HLine)  # type: ignore[attr-defined]
+            underline.setFrameShadow(QFrame.Plain)  # type: ignore[attr-defined]
+        underline.setStyleSheet("color: #d0d7de; background-color: #d0d7de;")
+        underline.setFixedHeight(1)
+        v.addWidget(underline)
         return frame
 
     # RADAR PREVIEW (Fluency Snapshot)
@@ -154,7 +156,10 @@ class DashboardView(QWidget):
 
         # Daily Plan header + today's date aligned with day headers (same row, right side).
         daily_plan_header = QLabel("<b>Daily Plan</b>")
-        today_label = QLabel(today.strftime("%A, %d %B %Y"))
+        # Match the weekday abbreviation used in the "Updated" status text
+        # (e.g. "Tue 18 Nov") by using the 3-letter %a form.
+        day_abbrev = today.strftime("%a")
+        today_label = QLabel(f"{day_abbrev} {today.strftime('%d %B %Y')}")
         today_label.setAlignment(
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         )
@@ -249,21 +254,34 @@ class DashboardView(QWidget):
         # Add the combined tracker + daily plan grid directly.
         layout.addWidget(grid_container)
 
-        # Consistency label that will be updated dynamically.
+        # Consistency label that will be updated dynamically, plus a status
+        # message ("Updated: …") shown on the same row, right-aligned.
         consistency_label = QLabel("", self)
-        layout.addWidget(consistency_label)
-        update_consistency_label()
-
         status_label = QLabel("", self)
-        layout.addWidget(status_label)
+
+        info_row = QHBoxLayout()
+        info_row.addWidget(consistency_label)
+        info_row.addStretch(1)
+        info_row.addWidget(status_label)
+        layout.addLayout(info_row)
+
+        update_consistency_label()
 
         # Buttons row: tracker button on the left, daily plan save on the right.
         button_row = QHBoxLayout()
         tracker_btn = QPushButton("View Full Tracker", self)
+        tracker_btn.setStyleSheet(
+            "QPushButton { border: 1px solid #d0d7de; border-radius: 4px; padding: 4px 10px; }"
+            "QPushButton:hover { background-color: rgba(255, 255, 255, 40); }"
+        )
         tracker_btn.clicked.connect(self._go_tracker)
         button_row.addWidget(tracker_btn)
         button_row.addStretch(1)
         save_btn = QPushButton("Save Daily Plan", self)
+        save_btn.setStyleSheet(
+            "QPushButton { border: 1px solid #d0d7de; border-radius: 4px; padding: 4px 10px; }"
+            "QPushButton:hover { background-color: rgba(255, 255, 255, 40); }"
+        )
         save_btn.clicked.connect(self._on_save_daily_plan)
         button_row.addWidget(save_btn)
         layout.addLayout(button_row)
@@ -435,12 +453,18 @@ class DashboardView(QWidget):
 
         self._populate_resources_preview()
 
-        button_row = QHBoxLayout()
-        button_row.addStretch(1)
-        btn = QPushButton("View All Resources", self)
-        btn.clicked.connect(self._go_resources)
-        button_row.addWidget(btn)
-        layout.addLayout(button_row)
+        # Place the "View All Resources" button in the header row so it
+        # aligns with the section title instead of sitting at the bottom.
+        header_item = layout.itemAt(0)
+        header_layout = header_item.layout() if header_item is not None else None
+        if isinstance(header_layout, QHBoxLayout):
+            btn = QPushButton("View All Resources", self)
+            btn.setStyleSheet(
+                "QPushButton { border: 1px solid #d0d7de; border-radius: 4px; padding: 4px 10px; }"
+                "QPushButton:hover { background-color: rgba(255, 255, 255, 40); }"
+            )
+            btn.clicked.connect(self._go_resources)
+            header_layout.addWidget(btn)
 
         return frame
 
@@ -472,15 +496,29 @@ class DashboardView(QWidget):
             rows_layout.addWidget(QLabel("No resources added yet"))
             return
 
+        main_window = self._main_window()
+        main_font = main_window.font() if main_window is not None else None
+
         for idx, obj in enumerate(items):
             row = QHBoxLayout()
             type_label = QLabel(str(obj.get("type", "")))
             name_label = QLabel(str(obj.get("name", "")))
             name_label.setWordWrap(True)
+
+            if main_font is not None:
+                type_label.setFont(main_font)
+                name_label.setFont(main_font)
+
             row.addWidget(type_label)
             row.addWidget(name_label, 1)
 
             btn = QPushButton("Open", self)
+            if main_font is not None:
+                btn.setFont(main_font)
+            btn.setStyleSheet(
+                "QPushButton { border: 1px solid #d0d7de; border-radius: 4px; padding: 2px 8px; }"
+                "QPushButton:hover { background-color: rgba(255, 255, 255, 40); }"
+            )
             btn.clicked.connect(lambda _=False, i=idx: self._go_resource(i))
             row.addWidget(btn)
 
@@ -641,9 +679,4 @@ class DashboardView(QWidget):
         # Editing finished on a card; update and persist.
         self._update_dashboard_goals_from_widgets()
 
-    def _on_auto_start_toggled(self, checked: bool) -> None:
-        """Persist the auto-start setting in the DailyPlan model."""
-
-        current = load_daily_plan()
-        plan = DailyPlan(tasks=list(current.tasks), show_on_startup=checked)
-        save_daily_plan(plan)
+    # Auto-start behavior is now configured via the Settings tab.

@@ -354,10 +354,14 @@ class RadarView(QWidget):
         main_layout = QHBoxLayout(self)
         main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # Single-column layout: month selector + save + interactive chart + values + balance + trends + reminder banner
+        # Single-column layout: month selector + save + interactive chart + values
+        # + balance + trends + reminder banner.
         right_layout = QVBoxLayout()
         # Extremely tight vertical spacing so the chart and text feel connected
         right_layout.setSpacing(0)
+        # Center contents horizontally so the chart doesn't "pull" the card
+        # wider than it needs to be.
+        right_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
         month_row = QHBoxLayout()
         month_row.setContentsMargins(0, 0, 0, 0)
@@ -367,17 +371,32 @@ class RadarView(QWidget):
         self.month_combo.setSizeAdjustPolicy(
             QComboBox.SizeAdjustPolicy.AdjustToContents
         )
+        # Give the month selector a light border and subtle hover/focus
+        # background so it visually aligns with the dashboard buttons.
+        self.month_combo.setStyleSheet(
+            "QComboBox { border: 1px solid #d0d7de; border-radius: 4px; padding: 2px 6px; }"
+            "QComboBox:hover { background-color: rgba(255, 255, 255, 40); }"
+            "QComboBox:focus { border-color: #4a90e2; }"
+        )
         self._populate_months()
         month_row.addWidget(self.month_combo)
 
         # Push the save button to the right
         month_row.addStretch(1)
         self.save_button = QPushButton("Save", self)
+        self.save_button.setStyleSheet(
+            "QPushButton { border: 1px solid #d0d7de; border-radius: 4px; padding: 4px 10px; }"
+            "QPushButton:hover { background-color: rgba(255, 255, 255, 40); }"
+        )
         month_row.addWidget(self.save_button)
         right_layout.addLayout(month_row)
         self.chart = InteractiveRadarWidget(self)
-        # Slightly smaller fixed height so the text sits closer to the chart
+        # Slightly smaller fixed height so the text sits closer to the chart.
         self.chart.setFixedHeight(220)
+        # Limit the chart's width so it doesn't expand to fill the entire
+        # dashboard card, which otherwise creates a very wide empty band to
+        # the right on large windows.
+        self.chart.setMaximumWidth(260)
         right_layout.addWidget(self.chart)
 
         # Compact metrics block under the chart: values + balance + trends

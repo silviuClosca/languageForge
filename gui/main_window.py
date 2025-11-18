@@ -3,14 +3,27 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from aqt.qt import Qt, QVBoxLayout, QLabel, QTabWidget, QHBoxLayout, QWidget, QScrollArea
+from aqt import mw
+from aqt.qt import (
+    Qt,
+    QVBoxLayout,
+    QLabel,
+    QTabWidget,
+    QHBoxLayout,
+    QWidget,
+    QScrollArea,
+    QToolButton,
+    QStyle,
+    QDockWidget,
+)
 
 from .dashboard_view import DashboardView
 from .radar_view import RadarView
 from .tracker_view import TrackerView
 from .goals_view import GoalsView
 from .resources_view import ResourcesView
-from ..core.storage import load_json, save_json
+from .settings_view import SettingsView
+from ..core.logic_settings import load_settings, Settings
 
 
 class FluencyForgeWindow(QWidget):
@@ -19,6 +32,17 @@ class FluencyForgeWindow(QWidget):
         self.resize(900, 600)
 
         main_layout = QVBoxLayout(self)
+        # Remove outer margins so the tab bar sits flush with the top edge of
+        # the dock, matching Anki's own top button row.
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Settings/state
+        self._settings: Settings = load_settings()
+        # Remember the initial base font size so Small/Medium/Large can be
+        # applied symmetrically regardless of how many times the user toggles.
+        initial_font = self.font()
+        self._base_font_size = initial_font.pointSize() or 10
 
         # Start directly with the tab bar inside a scroll area so tall
         # content (like the dashboard radar) doesn't push controls
@@ -30,20 +54,58 @@ class FluencyForgeWindow(QWidget):
         self.tracker_view = TrackerView(self)
         self.goals_view = GoalsView(self)
         self.resources_view = ResourcesView(self)
+        self.settings_view = SettingsView(
+            self, apply_theme_callback=self._on_settings_changed
+        )
 
         self.tabs.addTab(self.dashboard_view, "Dashboard")
         self.tabs.addTab(self.tracker_view, "Daily Tracker")
         self.tabs.addTab(self.goals_view, "Goals")
         self.tabs.addTab(self.resources_view, "Resources")
+        self.tabs.addTab(self.settings_view, "Settings")
+
+        # Initial tab styling based on current Anki theme.
+        self._apply_tab_styles()
+        self._apply_font_size()
+
+        # Inline window controls aligned with the tab bar: pop-out and close.
+        controls = QWidget(self)
+        controls_layout = QHBoxLayout(controls)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        controls_layout.setSpacing(4)
+
+        self.popout_button = QToolButton(controls)
+        self.popout_button.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarNormalButton)
+        )
+        self.popout_button.setToolTip("Pop out FluencyForge window")
+        self.popout_button.clicked.connect(self._on_popout_clicked)
+        controls_layout.addWidget(self.popout_button)
+
+        self.close_button = QToolButton(controls)
+        self.close_button.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarCloseButton)
+        )
+        self.close_button.setToolTip("Close FluencyForge")
+        self.close_button.clicked.connect(self._on_close_clicked)
+        controls_layout.addWidget(self.close_button)
+
+        self.tabs.setCornerWidget(controls, Qt.Corner.TopRightCorner)
 
         # React to tab changes so we can refresh dashboard/goals views.
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
-        scroll = QScrollArea(self)
+        self._scroll = QScrollArea(self)
+        scroll = self._scroll
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        # Only vertical scrolling; keep width fixed to the dock.
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # Allow horizontal scrolling when needed so larger font sizes don't
+        # cause the right edge of the UI to be clipped.
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        # Anchor content to the top-right inside the scroll area. When the
+        # content becomes wider than the dock, the extra space is placed on
+        # the left so the right edge (buttons, etc.) stays visible.
+        scroll.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
         scroll.setWidget(self.tabs)
         main_layout.addWidget(scroll)
 
@@ -64,7 +126,9 @@ class FluencyForgeWindow(QWidget):
         return
 
     def _on_tab_changed(self, index: int) -> None:
-        # When switching tabs, refresh any views that cache data from disk.
+        # When switching tabs, refresh any views that cache data from disk and
+        # re-apply tab styles in case the Anki theme changed.
+        self._apply_tab_styles()
         widget = self.tabs.widget(index)
         if widget is self.dashboard_view:
             if hasattr(self.dashboard_view, "refresh_goals_from_storage"):
@@ -100,3 +164,130 @@ class FluencyForgeWindow(QWidget):
         self.show_resources_tab()
         if hasattr(self.resources_view, "select_row"):
             self.resources_view.select_row(index_row)
+
+    def _apply_font_size(self) -> None:
+        """Apply the configured font size to the FluencyForge UI.
+
+        We adjust the base font on the main window and propagate it to all
+        children so that Dashboard/Tracker/Goals/Resources/Settings update
+        immediately when the user changes the size in Settings.
+        """
+
+        font = self.font()
+        base = self._base_font_size
+
+        # New representation: a point size stored as a string (e.g. "11").
+        # Fallback to legacy "scale_N" or small/medium/large values.
+        raw = getattr(self._settings, "font_size", str(base))
+
+        if isinstance(raw, str) and raw.isdigit():
+            new_size = int(raw)
+        elif isinstance(raw, str) and raw.startswith("scale_"):
+            try:
+                scale = int(raw.split("_", 1)[1])
+            except ValueError:
+                scale = 0
+            new_size = base + scale
+        else:
+            legacy_map = {"small": base - 1, "medium": base, "large": base + 2}
+            new_size = legacy_map.get(str(raw), base)
+
+        new_size = max(6, min(24, new_size))
+        font.setPointSize(new_size)
+
+        self.setFont(font)
+        for child in self.findChildren(QWidget):
+            child.setFont(font)
+
+        # After resizing fonts, keep the right edge of the content visible by
+        # scrolling horizontally to the maximum extent if needed.
+        scroll = getattr(self, "_scroll", None)
+        if scroll is not None:
+            hbar = scroll.horizontalScrollBar()
+            if hbar is not None:
+                hbar.setValue(hbar.maximum())
+
+    def _apply_tab_styles(self) -> None:
+        """Style the tab bar to match Anki's top bar in the current theme."""
+
+        is_dark = False
+        try:
+            if hasattr(mw, "pm"):
+                # night_mode() exists on older Anki; theme attribute on newer.
+                if hasattr(mw.pm, "night_mode"):
+                    is_dark = bool(mw.pm.night_mode())
+                elif hasattr(mw.pm, "theme"):
+                    theme = str(getattr(mw.pm, "theme", "")).lower()
+                    is_dark = "dark" in theme or "night" in theme
+        except Exception:
+            is_dark = False
+
+        tab_text_color = "white" if is_dark else "black"
+        tab_bg_color = "#333333" if is_dark else "white"
+
+        tabs_stylesheet = (
+            "QTabWidget::pane {"
+            " border: none;"
+            " }"
+            "QTabBar::tab {"
+            f" background: {tab_bg_color};"
+            f" color: {tab_text_color};"
+            " border: none;"
+            " padding: 6px 12px;"
+            " margin-right: 4px;"
+            " border-radius: 0px;"
+            " }"
+            "QTabBar::tab:selected {"
+            " border-bottom: 2px solid #58a6ff;"
+            " font-weight: 600;"
+            f" color: {tab_text_color};"
+            " border-radius: 0px;"
+            " }"
+            "QTabBar::tab:hover {"
+            " background: rgba(0, 0, 0, 20);"
+            " border-radius: 0px;"
+            " }"
+        )
+        self.tabs.setStyleSheet(tabs_stylesheet)
+
+    def _on_settings_changed(self, settings: Settings) -> None:
+        """Callback from SettingsView when settings are updated."""
+
+        self._settings = settings
+        # Re-apply tab bar style (for text/background).
+        self._apply_tab_styles()
+
+        # First rebuild dashboard previews that create widgets dynamically so
+        # that the new widgets are present when we apply the font size.
+        if hasattr(self.dashboard_view, "refresh_resources_from_storage"):
+            self.dashboard_view.refresh_resources_from_storage()
+
+        # Now apply the font size to the entire FluencyForge UI, including the
+        # freshly rebuilt dashboard resources preview.
+        self._apply_font_size()
+
+    # dock helpers -----------------------------------------------------
+
+    def _find_dock(self) -> Optional[QDockWidget]:
+        """Locate the FluencyForge QDockWidget in Anki's main window."""
+
+        if mw is None:
+            return None
+        return mw.findChild(QDockWidget, "FluencyForgeDock")
+
+    def _on_popout_clicked(self) -> None:
+        """Pop out the FluencyForge dock as a floating window."""
+
+        dock = self._find_dock()
+        if dock is None:
+            return
+        dock.setFloating(True)
+        dock.raise_()
+
+    def _on_close_clicked(self) -> None:
+        """Close (hide) the FluencyForge dock."""
+
+        dock = self._find_dock()
+        if dock is None:
+            return
+        dock.hide()

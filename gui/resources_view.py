@@ -134,6 +134,10 @@ class ResourcesView(QWidget):
 
         layout = QVBoxLayout(self)
 
+        # Main container for search + table.
+        container = QWidget(self)
+        container_layout = QVBoxLayout(container)
+
         # Search / filter bar
         search_row = QHBoxLayout()
         search_label = QLabel("Search:", self)
@@ -143,7 +147,7 @@ class ResourcesView(QWidget):
         )
         search_row.addWidget(search_label)
         search_row.addWidget(self.search_edit, 1)
-        layout.addLayout(search_row)
+        container_layout.addLayout(search_row)
 
         self.table = QTableWidget(self)
         # Slightly larger font for better readability in the resources list.
@@ -190,7 +194,9 @@ class ResourcesView(QWidget):
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
         # Name column stretches to fill remaining space
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        layout.addWidget(self.table)
+        container_layout.addWidget(self.table)
+
+        layout.addWidget(container)
 
         buttons = QHBoxLayout()
         self.add_button = QPushButton("Add", self)
@@ -265,9 +271,6 @@ class ResourcesView(QWidget):
                     cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
                     # Type is only visible as tooltip on the icon column.
                     cell.setToolTip(item.type or "")
-                elif col == 1:
-                    # Name column: always white text, even if it has a link.
-                    cell.setForeground(Qt.GlobalColor.white)
                 elif col == 2 and item.link.strip():
                     # Link column is clickable, use a custom blue.
                     cell.setForeground(QColor("#58a6ff"))

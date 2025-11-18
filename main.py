@@ -1,10 +1,11 @@
 from typing import Optional
 
 from aqt import mw, gui_hooks
-from aqt.qt import QAction, QDockWidget, Qt
+from aqt.qt import QAction, QDockWidget, Qt, QWidget
 
 from .gui.main_window import FluencyForgeWindow
 from .core.logic_dailyplan import load_daily_plan
+from .core.logic_settings import load_settings
 
 _ff_dock: Optional[QDockWidget] = None
 _ff_widget: Optional[FluencyForgeWindow] = None
@@ -21,6 +22,9 @@ def _ensure_dock() -> QDockWidget:
         dock = QDockWidget("FluencyForge", mw)
         dock.setObjectName("FluencyForgeDock")
         dock.setWidget(_ff_widget)
+        # Hide the default title bar (text + native buttons); we provide
+        # custom pop-out/close buttons inline in the tab bar instead.
+        dock.setTitleBarWidget(QWidget(dock))
         mw.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
         _ff_dock = dock
     return _ff_dock
@@ -33,8 +37,17 @@ def _show_fluencyforge() -> None:
 
 
 def _maybe_show_on_startup() -> None:
-    plan = load_daily_plan()
-    if not plan.show_on_startup:
+    # New behavior: settings.open_on_startup is the main source of truth.
+    settings = load_settings()
+    show = settings.open_on_startup
+
+    # Backward compatibility: if settings are default and the legacy
+    # DailyPlan flag was enabled, respect it once.
+    if not show:
+        plan = load_daily_plan()
+        show = bool(getattr(plan, "show_on_startup", False))
+
+    if not show:
         return
 
     dock = _ensure_dock()
@@ -48,3 +61,17 @@ def init_addon() -> None:
     mw.form.menuTools.addAction(action)
 
     gui_hooks.main_window_did_init.append(_maybe_show_on_startup)
+
+    # When Anki's theme changes (light <-> dark), update FluencyForge tab
+    # styling immediately so backgrounds/text reflect the new palette.
+    try:
+        if hasattr(gui_hooks, "theme_did_change"):
+            def _on_theme_changed() -> None:
+                global _ff_widget
+                if _ff_widget is not None and hasattr(_ff_widget, "_apply_tab_styles"):
+                    _ff_widget._apply_tab_styles()  # type: ignore[attr-defined]
+
+            gui_hooks.theme_did_change.append(_on_theme_changed)  # type: ignore[attr-defined]
+    except Exception:
+        # Older Anki versions may not have theme_did_change; ignore.
+        pass
