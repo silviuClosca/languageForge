@@ -1,5 +1,10 @@
 # FluencyForge
 
+## Install from AnkiWeb
+
+Add-on code: **275563061**  
+https://ankiweb.net/shared/info/275563061
+
 **FluencyForge** is an Anki add-on that helps you track and balance your language-learning practice across the four core skills:
 
 - **Reading**
@@ -116,3 +121,4 @@ Key modules:
 **MIT License + Non-Commercial Addendum**  
 You may not use this software for commercial purposes without obtaining a separate commercial license.  
 See the full `LICENSE` file for details.
+
