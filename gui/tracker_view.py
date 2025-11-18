@@ -12,6 +12,7 @@ from aqt.qt import (
     QComboBox,
     Qt,
     QGridLayout,
+    QSizePolicy,
 )
 
 from ..core.logic_tracker import load_daily_activity, save_daily_activity
@@ -30,42 +31,65 @@ class TrackerView(QWidget):
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        self.mode_label = QLabel("Daily Tracker – Monthly View", self)
-        layout.addWidget(self.mode_label)
+        # We no longer show a separate heading text; the Month selector row
+        # acts as the visual header for this view.
+        self.mode_label = QLabel("", self)
+        self.mode_label.setVisible(False)
 
         # Monthly view only
         monthly_container = QWidget(self)
         monthly_layout = QVBoxLayout(monthly_container)
 
-        top = QHBoxLayout()
-        top.addWidget(QLabel("Month"))
-        self.month_combo = QComboBox(self)
-        top.addWidget(self.month_combo)
-        monthly_layout.addLayout(top)
+        # Header row: "Month" label and a compact combo box, packed together
+        # and anchored to the left.
+        header = QWidget(self)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(6)
 
-        # Monthly grid: layout-based (no table), similar to weekly dashboard preview.
+        header_layout.addWidget(QLabel("Month", header))
+        self.month_combo = QComboBox(header)
+        # Keep the month selector compact: size to its text + arrow only.
+        self.month_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToContents
+        )
+        self.month_combo.setSizePolicy(
+            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
+        )
+        header_layout.addWidget(self.month_combo)
+
+        monthly_layout.addWidget(header)
+        monthly_layout.setAlignment(header, Qt.AlignmentFlag.AlignLeft)
+
+        # Main content row: monthly grid on the left, analytics+legend column
+        # on the right.
+        content_row = QHBoxLayout()
+
+        # Monthly grid: layout-based (no table), similar to weekly dashboard
+        # preview. We keep the grid's natural width and align it to the left so
+        # columns don't stretch to fill the entire container.
         self.grid_container = QWidget(self)
+        self.grid_container.setSizePolicy(
+            QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred
+        )
         self.grid_layout = QGridLayout(self.grid_container)
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
-        # Slightly tighter horizontal spacing so emoji column sits closer to circles.
-        self.grid_layout.setHorizontalSpacing(4)
+        # Tighter spacing so the monthly calendar columns sit closer together.
+        self.grid_layout.setHorizontalSpacing(12)
         self.grid_layout.setVerticalSpacing(6)
         # Column 0 (emoji) should stay narrow; remaining columns get the space.
         self.grid_layout.setColumnStretch(0, 0)
-        monthly_layout.addWidget(self.grid_container)
+        content_row.addWidget(self.grid_container)
 
-        # Legend under the table
-        legend_layout = QHBoxLayout()
-        for skill in self.skills:
-            emoji = get_skill_emoji(skill)
-            label = get_skill_label(skill)
-            item = QLabel(f"{emoji} {label}", self)
-            legend_layout.addWidget(item)
-        legend_layout.addStretch(1)
-        monthly_layout.addLayout(legend_layout)
-
+        # Right column: analytics text only (multi-line label). The meaning of
+        # each emoji is now shown directly in the grid's left column, so we no
+        # longer need a separate legend column.
+        side_column = QVBoxLayout()
         self.month_stats_label = QLabel("", self)
-        monthly_layout.addWidget(self.month_stats_label)
+        side_column.addWidget(self.month_stats_label)
+
+        content_row.addLayout(side_column)
+        monthly_layout.addLayout(content_row)
 
         layout.addWidget(monthly_container)
 
@@ -128,36 +152,54 @@ class TrackerView(QWidget):
             if w is not None:
                 w.deleteLater()
 
-        # Helper to add a band of consecutive days starting at start_day.
-        # Returns the next free row index after the band.
-        def add_band(start_day: int, count: int, base_row: int) -> int:
-            if count <= 0:
-                return base_row
+        # Calendar-style layout by weeks: columns = Mon–Sun, rows = weeks.
+        # Compute weekday of the first of the month (0=Monday .. 6=Sunday).
+        first_weekday, _ = monthrange(year, month_num)
 
-            # Empty corner for this band
-            self.grid_layout.addWidget(QLabel("", self.grid_container), base_row, 0)
+        # Fill the calendar grid week by week. Each week consumes
+        # (len(skills) + 1) rows: 1 header row + 1 row per skill.
+        current_day = 1
+        week_index = 0
+        while current_day <= days_in_month:
+            base_row = week_index * (len(self.skills) + 1)
 
-            # Day headers
-            for col in range(count):
-                day_num = start_day + col
-                header = QLabel(str(day_num), self.grid_container)
+            # Header row for this week: day numbers for each column.
+            for col in range(7):
+                calendar_index = week_index * 7 + col
+                day_num = calendar_index - first_weekday + 1
+
+                header = QLabel("", self.grid_container)
                 header.setAlignment(
                     Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter
                 )
+                if 1 <= day_num <= days_in_month:
+                    header.setText(str(day_num))
                 self.grid_layout.addWidget(header, base_row, col + 1)
 
-            # Skill icons and circles
+            # Skill rows for this week.
             for offset_row, skill in enumerate(self.skills, start=1):
                 row = base_row + offset_row
-                emoji_label = QLabel(get_skill_emoji(skill), self.grid_container)
+
+                # Emoji + label in column 0 for this skill/week, so users can
+                # read the meaning without a separate legend.
+                emoji = get_skill_emoji(skill)
+                skill_name = get_skill_label(skill)
+                emoji_label = QLabel(f"{emoji} {skill_name}", self.grid_container)
                 emoji_label.setAlignment(
                     Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
                 )
-                emoji_label.setFixedWidth(18)
+                # Let the label expand enough to show both emoji and text.
+                emoji_label.setMinimumWidth(80)
                 self.grid_layout.addWidget(emoji_label, row, 0)
 
-                for col in range(count):
-                    day_num = start_day + col
+                # Circles for each day of this week.
+                for col in range(7):
+                    calendar_index = week_index * 7 + col
+                    day_num = calendar_index - first_weekday + 1
+
+                    if day_num < 1 or day_num > days_in_month:
+                        continue
+
                     day_str = date(year, month_num, day_num).strftime("%Y-%m-%d")
                     day_data = self.activity.get(day_str, {})
                     done = bool(day_data.get(skill, False))
@@ -165,7 +207,9 @@ class TrackerView(QWidget):
                         done, size=18, parent=self.grid_container
                     )
 
-                    def make_handler(d_str: str, s: str, w: CircleIndicator) -> None:
+                    def make_handler(
+                        d_str: str, s: str, w: CircleIndicator
+                    ) -> None:
                         def _on_clicked() -> None:
                             day_data_inner = self.activity.setdefault(
                                 d_str, {sk: False for sk in self.skills}
@@ -181,18 +225,12 @@ class TrackerView(QWidget):
                     indicator.clicked.connect(make_handler(day_str, skill, indicator))
                     self.grid_layout.addWidget(indicator, row, col + 1)
 
-            return base_row + 1 + len(self.skills)
-
-        # First band: days 1–16 (or fewer if month shorter)
-        first_band_days = min(16, days_in_month)
-        next_row = add_band(1, first_band_days, 0)
-
-        # Second band: remaining days 17–end
-        remaining = days_in_month - 16
-        if remaining > 0:
-            # Add a small gap row between bands for visual separation
-            next_row += 1
-            add_band(17, remaining, next_row)
+            # Advance to next week.
+            current_day = min(
+                days_in_month + 1,
+                current_day + max(0, 7 - ((first_weekday + current_day - 1) % 7)),
+            )
+            week_index += 1
 
         self._update_month_stats()
 
@@ -226,12 +264,14 @@ class TrackerView(QWidget):
             s: int(100 * per_skill_counts[s] / days_in_month) for s in self.skills
         }
 
-        text = (
-            f"Active days: {active_days} / {days_in_month} | "
-            f"Longest streak: {longest_streak} days | "
-            + ", ".join(f"{s.capitalize()}: {per_skill_pct[s]}%" for s in self.skills)
+        lines = [
+            f"Active days: {active_days} / {days_in_month}",
+            f"Longest streak: {longest_streak} days",
+        ]
+        lines.extend(
+            f"{s.capitalize()}: {per_skill_pct[s]}%" for s in self.skills
         )
-        self.month_stats_label.setText(text)
+        self.month_stats_label.setText("\n".join(lines))
 
     # --------------------
     # View toggle

@@ -17,7 +17,7 @@ def _ensure_dock() -> QDockWidget:
         _ff_widget = FluencyForgeWindow(mw)
         # Ensure the dock is wide enough that all dashboard content
         # (including the radar) is visible without horizontal resizing.
-        _ff_widget.setMinimumWidth(600)
+        _ff_widget.setMinimumWidth(520)
 
         dock = QDockWidget("FluencyForge", mw)
         dock.setObjectName("FluencyForgeDock")

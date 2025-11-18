@@ -99,6 +99,51 @@ class DashboardView(QWidget):
         v.addWidget(underline)
         return frame
 
+    def refresh_week_from_storage(self) -> None:
+        """Reload weekly activity from storage into the dashboard preview.
+
+        This keeps the weekly view in sync with edits made in the full
+        Monthly Tracker tab.
+        """
+
+        if not hasattr(self, "_weekly_indicators") or not hasattr(
+            self, "_weekly_start_date"
+        ):
+            return
+
+        activity = load_daily_activity()
+        start = self._weekly_start_date
+        skills = getattr(
+            self,
+            "_weekly_skills",
+            ["reading", "listening", "speaking", "writing"],
+        )
+
+        # Update circles from the latest activity data.
+        active_days = 0
+        total_days = 7
+        for row_idx, row_indicators in enumerate(self._weekly_indicators):
+            if row_idx >= len(skills):
+                break
+            skill = skills[row_idx]
+            any_active_row = False
+            for col, indicator in enumerate(row_indicators):
+                day = start + timedelta(days=col)
+                day_str = day.strftime("%Y-%m-%d")
+                day_data = activity.get(day_str, {})
+                done = bool(day_data.get(skill, False))
+                indicator.set_completed(done)
+                if done:
+                    any_active_row = True
+            if any_active_row:
+                active_days += 1
+
+        percent = int(100 * active_days / total_days) if total_days else 0
+        if hasattr(self, "_weekly_consistency_label"):
+            self._weekly_consistency_label.setText(
+                f"This Week: {percent}% consistency — {active_days} active days"
+            )
+
     # RADAR PREVIEW (Fluency Snapshot)
     def _create_radar_section(self) -> QFrame:
         """Show the full interactive RadarView directly on the dashboard."""
@@ -116,14 +161,20 @@ class DashboardView(QWidget):
         frame = self._create_section_frame("This Week's Activity")
         layout = frame.layout()  # type: ignore[assignment]
 
-        activity = load_daily_activity()
         skills = ["reading", "listening", "speaking", "writing"]
+        # Load current activity once to set the initial state of the circles.
+        # Subsequent updates always reload from storage on demand.
+        activity = load_daily_activity()
 
         # Load current daily plan (4 generic tasks) to show alongside tracker.
         plan: DailyPlan = load_daily_plan()
 
         today = date.today()
         start = today - timedelta(days=today.weekday())  # Monday
+        # Keep track of which week the preview is showing so we can refresh it
+        # from storage later.
+        self._weekly_start_date = start
+        self._weekly_skills = skills
 
         # Grid: row 0 = headers, rows 1-4 = skills
         grid_container = QWidget(self)
@@ -175,17 +226,24 @@ class DashboardView(QWidget):
         active_days = 0
         total_days = 7
 
+        # Track CircleIndicators so we can refresh the weekly preview from
+        # storage when coming back from the Monthly Tracker.
+        self._weekly_indicators: list[list[CircleIndicator]] = []
+
         # Prepare inline Daily Plan edits aligned with skill rows.
         self._daily_plan_edits: list[QLineEdit] = []
 
         # Helper to recompute weekly consistency label based on current activity.
         def update_consistency_label() -> None:
-            # Count how many days in the current week have at least one skill done.
+            # Count how many days in the current week have at least one skill
+            # done. Always reload from storage so changes made in the Monthly
+            # Tracker or other sessions are reflected correctly.
+            activity_current = load_daily_activity()
             active = 0
             for offset in range(7):
                 day = start + timedelta(days=offset)
                 day_str = day.strftime("%Y-%m-%d")
-                day_data = activity.get(day_str, {})
+                day_data = activity_current.get(day_str, {})
                 if any(bool(day_data.get(sk, False)) for sk in skills):
                     active += 1
             percent = int(100 * active / total_days) if total_days else 0
@@ -204,6 +262,7 @@ class DashboardView(QWidget):
             grid.addWidget(skill_label, row, 0)
 
             any_active_row = False
+            row_indicators: list[CircleIndicator] = []
             for col in range(7):
                 day = start + timedelta(days=col)
                 day_str = day.strftime("%Y-%m-%d")
@@ -214,12 +273,16 @@ class DashboardView(QWidget):
                 def make_handler(d, s, w):
                     def _on_clicked():
                         day_s = d.strftime("%Y-%m-%d")
-                        day_data_inner = activity.setdefault(
+                        # Reload latest activity from storage to avoid
+                        # overwriting changes made elsewhere (e.g. Monthly
+                        # Tracker) with a stale in-memory copy.
+                        activity_current = load_daily_activity()
+                        day_data_inner = activity_current.setdefault(
                             day_s, {sk: False for sk in skills}
                         )
                         new_val = not bool(day_data_inner.get(s, False))
                         day_data_inner[s] = new_val
-                        save_daily_activity(activity)
+                        save_daily_activity(activity_current)
                         w.set_completed(new_val)
                         status_label.setText(
                             f"Updated: {get_skill_label(s)} on {d.strftime('%a %d %b')}"
@@ -230,6 +293,7 @@ class DashboardView(QWidget):
 
                 indicator.clicked.connect(make_handler(day, skill, indicator))
                 grid.addWidget(indicator, row, col + 1)
+                row_indicators.append(indicator)
                 if done:
                     any_active_row = True
 
@@ -251,12 +315,15 @@ class DashboardView(QWidget):
             if any_active_row:
                 active_days += 1
 
+            self._weekly_indicators.append(row_indicators)
+
         # Add the combined tracker + daily plan grid directly.
         layout.addWidget(grid_container)
 
         # Consistency label that will be updated dynamically, plus a status
         # message ("Updated: …") shown on the same row, right-aligned.
         consistency_label = QLabel("", self)
+        self._weekly_consistency_label = consistency_label
         status_label = QLabel("", self)
 
         info_row = QHBoxLayout()

@@ -12,14 +12,14 @@
     "writing": false
   },
   "2025-11-17": {
-    "reading": true,
+    "reading": false,
     "listening": true,
-    "speaking": true,
-    "writing": false
+    "speaking": false,
+    "writing": true
   },
   "2025-11-18": {
     "reading": true,
-    "listening": true,
+    "listening": false,
     "speaking": true,
     "writing": false
   },

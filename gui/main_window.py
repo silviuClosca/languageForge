@@ -59,7 +59,7 @@ class FluencyForgeWindow(QWidget):
         )
 
         self.tabs.addTab(self.dashboard_view, "Dashboard")
-        self.tabs.addTab(self.tracker_view, "Daily Tracker")
+        self.tabs.addTab(self.tracker_view, "Tracker")
         self.tabs.addTab(self.goals_view, "Goals")
         self.tabs.addTab(self.resources_view, "Resources")
         self.tabs.addTab(self.settings_view, "Settings")
@@ -135,6 +135,8 @@ class FluencyForgeWindow(QWidget):
                 self.dashboard_view.refresh_goals_from_storage()
             if hasattr(self.dashboard_view, "refresh_resources_from_storage"):
                 self.dashboard_view.refresh_resources_from_storage()
+            if hasattr(self.dashboard_view, "refresh_week_from_storage"):
+                self.dashboard_view.refresh_week_from_storage()
         elif widget is self.goals_view and hasattr(self.goals_view, "refresh_current_month"):
             self.goals_view.refresh_current_month()
         elif widget is self.tracker_view and hasattr(self.tracker_view, "refresh_from_storage"):
