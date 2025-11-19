@@ -350,21 +350,6 @@ class TrackerView(QWidget):
         )
         self.month_stats_label.setText("\n".join(lines))
 
-    # --------------------
-    # View toggle
-    # --------------------
-    def _on_toggle_view(self) -> None:
-        if self.stack.currentIndex() == 0:
-            # switch to monthly
-            self.stack.setCurrentIndex(1)
-            self.mode_label.setText("Daily Tracker – Monthly View")
-            self.toggle_view_btn.setText("Switch to Weekly View")
-        else:
-            # switch to weekly
-            self.stack.setCurrentIndex(0)
-            self.mode_label.setText("Daily Tracker – Weekly View")
-            self.toggle_view_btn.setText("Switch to Monthly View")
-
     def apply_theme(self, colors: 'ThemeColors') -> None:
         """Apply theme colors to tracker view components."""
         self._theme_colors = colors

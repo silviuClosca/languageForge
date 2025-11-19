@@ -879,8 +879,8 @@ class DashboardView(QWidget):
         self._refresh_dashboard_goal_colors()
 
     def _on_dashboard_goal_checked(self, index: int, checked: bool) -> None:
-        if index < len(self._goal_checks_dash):
-            self._goal_checks_dash[index].setChecked(checked)
+        # Checkbox is already in the correct state since this handler was
+        # triggered by the checkbox changing. Just update and persist.
         self._update_dashboard_goals_from_widgets()
 
     def _on_dashboard_goal_edited(self, index: int) -> None:

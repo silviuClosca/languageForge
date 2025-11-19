@@ -31,7 +31,6 @@ class LanguageForgeWindow(QWidget):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("LanguageForge")
-        self.resize(900, 700)
 
         # Set object name for styling
         self.setObjectName("languageforge_main")
@@ -135,10 +134,6 @@ class LanguageForgeWindow(QWidget):
     def set_status(self, text: str) -> None:
         now = datetime.now().strftime("%H:%M")
         self.status_label.setText(f"{text} – {now}")
-
-    def _restore_last_tab(self) -> None:
-        # Behavior changed: we now always start on Dashboard, so this is a no-op.
-        return
 
     def _on_tab_changed(self, index: int) -> None:
         # When switching tabs, refresh any views that cache data from disk and

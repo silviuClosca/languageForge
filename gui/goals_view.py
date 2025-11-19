@@ -342,6 +342,8 @@ class GoalsView(QWidget):
                 )
                 chk = QCheckBox(self.subtasks_containers[i])
                 chk.setTristate(False)
+                # Block signals before setting values to prevent premature auto-save
+                chk.blockSignals(True)
                 chk.setChecked(initial_done)
                 chk.setStyleSheet(
                     "QCheckBox::indicator { width: 0px; height: 0px; "
@@ -349,6 +351,8 @@ class GoalsView(QWidget):
                 )
 
                 edit = QLineEdit(self.subtasks_containers[i])
+                # Block signals before setting text to prevent premature auto-save
+                edit.blockSignals(True)
                 edit.setText(str(s_text))
 
                 delete_btn = QPushButton("✕", self.subtasks_containers[i])
@@ -370,6 +374,10 @@ class GoalsView(QWidget):
                 delete_btn.clicked.connect(
                     lambda _=False, gi=i, rl=row: self._remove_subtask_row(gi, rl)
                 )
+                
+                # Unblock signals after connections are made
+                chk.blockSignals(False)
+                edit.blockSignals(False)
 
         # Unblock signals after all widgets are updated
         for i in range(3):

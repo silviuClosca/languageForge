@@ -10,11 +10,11 @@ from aqt.qt import (
     QTextEdit,
     QPushButton,
     QCheckBox,
+    Qt,
 )
 
 from ..core.logic_dailyplan import load_daily_plan, save_daily_plan
 from ..core.models import DailyPlan
-from .dailyplan_popup import DailyPlanPopup
 
 
 class DailyPlanView(QWidget):
@@ -22,24 +22,19 @@ class DailyPlanView(QWidget):
         super().__init__(parent)
 
         layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # Morning
-        layout.addWidget(QLabel("Morning"))
-        self.morning_edit = QTextEdit(self)
-        self.morning_edit.setMinimumHeight(80)
-        layout.addWidget(self.morning_edit)
-
-        # Afternoon
-        layout.addWidget(QLabel("Afternoon"))
-        self.afternoon_edit = QTextEdit(self)
-        self.afternoon_edit.setMinimumHeight(80)
-        layout.addWidget(self.afternoon_edit)
-
-        # Evening
-        layout.addWidget(QLabel("Evening"))
-        self.evening_edit = QTextEdit(self)
-        self.evening_edit.setMinimumHeight(80)
-        layout.addWidget(self.evening_edit)
+        # Task sections - generic labels for flexibility
+        task_labels = ["Task 1", "Task 2", "Task 3", "Task 4"]
+        self.task_edits = []
+        
+        for label in task_labels:
+            layout.addWidget(QLabel(label, self))
+            task_edit = QTextEdit(self)
+            task_edit.setMaximumHeight(100)
+            task_edit.textChanged.connect(self._on_save)
+            layout.addWidget(task_edit)
+            self.task_edits.append(task_edit)
 
         # Behavior: show on startup
         self.show_on_startup_checkbox = QCheckBox(
@@ -49,10 +44,8 @@ class DailyPlanView(QWidget):
 
         # Actions row
         actions_row = QHBoxLayout()
-        self.preview_button = QPushButton("Preview Day View", self)
-        self.save_button = QPushButton("Save Plan", self)
-        actions_row.addWidget(self.preview_button)
         actions_row.addStretch(1)
+        self.save_button = QPushButton("Save Plan", self)
         actions_row.addWidget(self.save_button)
         layout.addLayout(actions_row)
 
@@ -61,37 +54,24 @@ class DailyPlanView(QWidget):
         layout.addWidget(self.status_label)
 
         self.save_button.clicked.connect(self._on_save)
-        self.preview_button.clicked.connect(self._on_preview)
 
         self._load()
 
     def _load(self) -> None:
         plan: DailyPlan = load_daily_plan()
-        self.morning_edit.setPlainText(plan.morning)
-        self.afternoon_edit.setPlainText(plan.afternoon)
-        self.evening_edit.setPlainText(plan.evening)
+        # Load tasks into editors
+        for i, task_edit in enumerate(self.task_edits):
+            if i < len(plan.tasks):
+                task_edit.setPlainText(plan.tasks[i] or "")
+            else:
+                task_edit.setPlainText("")
         self.show_on_startup_checkbox.setChecked(plan.show_on_startup)
 
     def _on_save(self) -> None:
-        current = load_daily_plan()
+        tasks = [edit.toPlainText() for edit in self.task_edits]
         plan = DailyPlan(
-            morning=self.morning_edit.toPlainText(),
-            afternoon=self.afternoon_edit.toPlainText(),
-            evening=self.evening_edit.toPlainText(),
+            tasks=tasks,
             show_on_startup=self.show_on_startup_checkbox.isChecked(),
         )
         save_daily_plan(plan)
-        self.status_label.setText("Plan saved")
-
-    def _on_preview(self) -> None:
-        """Open the read-only Day View popup for the current plan."""
-
-        # Use the current text in the editors so preview matches unsaved changes.
-        plan = DailyPlan(
-            morning=self.morning_edit.toPlainText(),
-            afternoon=self.afternoon_edit.toPlainText(),
-            evening=self.evening_edit.toPlainText(),
-            show_on_startup=self.show_on_startup_checkbox.isChecked(),
-        )
-        popup = DailyPlanPopup(plan, parent=self)
-        popup.show()
+        self.status_label.setText("Plan saved.")

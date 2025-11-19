@@ -453,31 +453,12 @@ class RadarView(QWidget):
         chart_row.addWidget(self.chart, 0, Qt.AlignmentFlag.AlignHCenter)
         right_layout.addLayout(chart_row)
 
-        # Metrics widgets (value labels, trend text, reminder) are still
-        # created for internal analysis, but no longer added under the chart in
-        # this compact dashboard view.
-        self.reading_label = QLabel("", self)
-        self.listening_label = QLabel("", self)
-        self.speaking_label = QLabel("", self)
-        self.writing_label = QLabel("", self)
-
-        self.trend_label = QLabel("No trend data yet", self)
-        self.trend_label.setContentsMargins(0, 0, 0, 0)
-        self.trend_label.setMargin(0)
-
+        # Reminder label still used for snapshot age warnings
         self.reminder_label = QLabel("", self)
         self.reminder_label.setContentsMargins(0, 0, 0, 0)
         self.reminder_label.setMargin(0)
 
         main_layout.addLayout(right_layout, 1)
-
-        # The wheel now shows per-skill values and trends directly,
-        # so keep the detailed value row and trend summary hidden.
-        self.reading_label.hide()
-        self.listening_label.hide()
-        self.speaking_label.hide()
-        self.writing_label.hide()
-        self.trend_label.hide()
 
         self.month_combo.currentTextChanged.connect(self._on_month_changed)
         self.save_button.clicked.connect(self._on_save)
@@ -567,17 +548,14 @@ class RadarView(QWidget):
         self.save_button.setEnabled(True)
 
     def _refresh_value_labels(self) -> None:
-        self.reading_label.setText(f"Reading: {self.values['reading']}")
-        self.listening_label.setText(f"Listening: {self.values['listening']}")
-        self.speaking_label.setText(f"Speaking: {self.values['speaking']}")
-        self.writing_label.setText(f"Writing: {self.values['writing']}")
+        # Labels removed - values now displayed directly on radar chart
+        pass
 
     def _update_analysis(self) -> None:
         """Update balance index and trend labels based on snapshots."""
 
         if not self.snapshots:
             self.balance_label.setText("Balance Index: -")
-            self.trend_label.setText("No trend data yet")
             self.chart.set_previous_values(None)
             return
 
@@ -585,7 +563,6 @@ class RadarView(QWidget):
         current = self.snapshots.get(month)
         if not isinstance(current, dict):
             self.balance_label.setText("Balance Index: -")
-            self.trend_label.setText("No trend data yet")
             self.chart.set_previous_values(None)
             return
 
@@ -603,7 +580,6 @@ class RadarView(QWidget):
             idx = -1
 
         if idx <= 0:
-            self.trend_label.setText("No trend data yet")
             # No previous month: reset trends on the chart to neutral
             self.chart.set_trends({})
             self.chart.set_previous_values(None)
@@ -626,18 +602,7 @@ class RadarView(QWidget):
             self.chart.set_previous_values(prev_values)
         else:
             self.chart.set_previous_values(None)
-        arrows = {"up": "↑", "down": "↓", "same": "="}
-        parts = []
-        for label, key in [
-            ("Reading", "reading"),
-            ("Listening", "listening"),
-            ("Speaking", "speaking"),
-            ("Writing", "writing"),
-        ]:
-            t = trends.get(key, "same")
-            arrow = arrows.get(t, "=")
-            parts.append(f"{label} {arrow}")
-        self.trend_label.setText(" | ".join(parts))
+        # Trend arrows now shown directly on radar chart axes
 
     def _update_banner(self) -> None:
         days = get_days_since_last_snapshot()
