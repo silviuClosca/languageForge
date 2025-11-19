@@ -542,13 +542,9 @@ class DashboardView(QWidget):
 
             check = QCheckBox(card)
             check.setTristate(False)
-            # Hide the built-in checkbox indicator; CircleIndicator is the
-            # visible control.
-            check.setStyleSheet(
-                "QCheckBox::indicator { width: 0px; height: 0px; "
-                "border: none; background-color: transparent; }"
-            )
-            row.addWidget(check)
+            # Hide the checkbox completely - it's only used for logic,
+            # the CircleIndicator is the visible control.
+            check.hide()
 
             edit = QLineEdit(card)
             edit.setPlaceholderText("Set your goal…")
