@@ -487,9 +487,18 @@ class GoalsView(QWidget):
                         bool(chk_widget.isChecked()) if isinstance(chk_widget, QCheckBox) else False
                     )
 
-            # If there are no rows in the layout, keep whatever subtasks were
-            # already stored for this goal instead of overwriting with [].
-            if not s_texts and goal_index < len(existing_subtasks):
+            # If there are no rows in the layout AND the subtasks section is
+            # collapsed (not visible), keep whatever subtasks were already stored
+            # for this goal instead of overwriting with []. This prevents
+            # accidentally wiping subtasks when editing other fields.
+            # However, if the section is visible/expanded, trust the current
+            # layout state even if empty (user may have deleted all subtasks).
+            subtasks_section_visible = (
+                goal_index < len(self.subtasks_containers) 
+                and self.subtasks_containers[goal_index].isVisible()
+            )
+            
+            if not s_texts and not subtasks_section_visible and goal_index < len(existing_subtasks):
                 new_subtasks.append(existing_subtasks[goal_index])
                 # Ensure done flags list matches length.
                 prev_done = list(existing_done[goal_index])
