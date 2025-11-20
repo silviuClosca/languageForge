@@ -4,7 +4,7 @@ from datetime import datetime, date
 from typing import Dict, Optional
 
 from .models import RadarSnapshot
-from .storage import load_json, save_json
+from .storage import load_profile_json, save_profile_json
 
 
 _FILENAME = "radar.json"
@@ -15,7 +15,7 @@ def _default() -> Dict[str, Dict]:
 
 
 def load_radar_snapshots() -> Dict[str, Dict]:
-    data = load_json(_FILENAME, _default())
+    data = load_profile_json(_FILENAME, _default())
     if not isinstance(data, dict):
         return _default()
     return data
@@ -24,7 +24,7 @@ def load_radar_snapshots() -> Dict[str, Dict]:
 def save_radar_snapshot(snapshot: RadarSnapshot) -> None:
     data = load_radar_snapshots()
     data[snapshot.month] = snapshot.to_dict()
-    save_json(_FILENAME, data)
+    save_profile_json(_FILENAME, data)
 
 
 def compute_balance_index(snapshot: Dict) -> Optional[int]:

@@ -6,6 +6,7 @@ from aqt.qt import QAction, QDockWidget, Qt, QWidget
 from .gui.main_window import LanguageForgeWindow
 from .core.logic_dailyplan import load_daily_plan
 from .core.logic_settings import load_settings
+from .core.logic_profiles import initialize_profiles_system
 
 _ff_dock: Optional[QDockWidget] = None
 _ff_widget: Optional[LanguageForgeWindow] = None
@@ -56,6 +57,9 @@ def _maybe_show_on_startup() -> None:
 
 
 def init_addon() -> None:
+    # Initialize the profiles system (create default profile, validate, cleanup)
+    initialize_profiles_system()
+    
     action = QAction("LanguageForge – Language System", mw)
     action.triggered.connect(_show_languageforge)
     mw.form.menuTools.addAction(action)

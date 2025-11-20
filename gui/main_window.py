@@ -15,6 +15,7 @@ from aqt.qt import (
     QToolButton,
     QStyle,
     QDockWidget,
+    QComboBox,
 )
 
 from .dashboard_view import DashboardView
@@ -25,6 +26,12 @@ from .resources_view import ResourcesView
 from .settings_view import SettingsView
 from ..core.logic_settings import load_settings, Settings
 from ..core.themes import get_theme_colors, ThemeColors
+from ..core.logic_profiles import (
+    list_profiles,
+    get_active_profile_id,
+    set_active_profile,
+    get_profile_display_name,
+)
 
 
 class LanguageForgeWindow(QWidget):
@@ -81,11 +88,21 @@ class LanguageForgeWindow(QWidget):
         self._apply_font_size()
         self._apply_theme_to_all_views()
 
-        # Inline window controls aligned with the tab bar: pop-out and close.
+        # Profile switcher + window controls aligned with the tab bar
         controls = QWidget(self)
         controls_layout = QHBoxLayout(controls)
         controls_layout.setContentsMargins(0, 0, 0, 0)
-        controls_layout.setSpacing(4)
+        controls_layout.setSpacing(8)
+
+        # Profile switcher dropdown
+        self.profile_combo = QComboBox(controls)
+        self.profile_combo.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.profile_combo.setToolTip("Switch between language profiles")
+        self._populate_profile_combo()
+        self.profile_combo.currentTextChanged.connect(self._on_profile_changed)
+        controls_layout.addWidget(self.profile_combo)
+        
+        controls_layout.addSpacing(12)
 
         self.popout_button = QToolButton(controls)
         self.popout_button.setIcon(
@@ -130,6 +147,87 @@ class LanguageForgeWindow(QWidget):
 
         # Always start on Dashboard tab (index 0)
         self.tabs.setCurrentIndex(0)
+    
+    def _populate_profile_combo(self) -> None:
+        """Populate the profile combo box with all available profiles."""
+        self.profile_combo.blockSignals(True)
+        self.profile_combo.clear()
+        
+        profiles = list_profiles()
+        active_id = get_active_profile_id()
+        
+        for profile in profiles:
+            display_name = profile.get("display_name", profile["id"])
+            self.profile_combo.addItem(display_name, profile["id"])
+        
+        # Set current profile
+        for i in range(self.profile_combo.count()):
+            if self.profile_combo.itemData(i) == active_id:
+                self.profile_combo.setCurrentIndex(i)
+                break
+        
+        self.profile_combo.blockSignals(False)
+    
+    def _on_profile_changed(self, display_name: str) -> None:
+        """Handle profile switch from combo box."""
+        # Get profile ID from combo box
+        idx = self.profile_combo.currentIndex()
+        if idx < 0:
+            return
+        
+        profile_id = self.profile_combo.itemData(idx)
+        if not profile_id:
+            return
+        
+        # Check if this is actually a change
+        if profile_id == get_active_profile_id():
+            return
+        
+        # Set as active profile
+        success = set_active_profile(profile_id)
+        if not success:
+            # Profile doesn't exist, repopulate combo
+            self._populate_profile_combo()
+            return
+        
+        # Reload all views with data from the new profile
+        self._reload_all_views_for_profile()
+    
+    def _reload_all_views_for_profile(self) -> None:
+        """Reload all views with data from the currently active profile."""
+        # Dashboard
+        if hasattr(self.dashboard_view, "refresh_goals_from_storage"):
+            self.dashboard_view.refresh_goals_from_storage()
+        if hasattr(self.dashboard_view, "refresh_resources_from_storage"):
+            self.dashboard_view.refresh_resources_from_storage()
+        if hasattr(self.dashboard_view, "refresh_week_from_storage"):
+            self.dashboard_view.refresh_week_from_storage()
+        
+        # Goals
+        if hasattr(self.goals_view, "refresh_current_month"):
+            self.goals_view.refresh_current_month()
+        
+        # Tracker
+        if hasattr(self.tracker_view, "refresh_from_storage"):
+            self.tracker_view.refresh_from_storage()
+        
+        # Resources
+        if hasattr(self.resources_view, "_load_items"):
+            self.resources_view._load_items()
+            if hasattr(self.resources_view, "_apply_filter_and_refresh"):
+                self.resources_view._apply_filter_and_refresh()
+        
+        # Radar (embedded in dashboard)
+        if hasattr(self.radar_view, "_load_current_month_values"):
+            self.radar_view._load_current_month_values()
+        
+        # Settings - refresh profile list to show new active profile
+        if hasattr(self.settings_view, "_load_profile_list"):
+            self.settings_view._load_profile_list()
+        
+        # Update status
+        profile_name = get_profile_display_name(get_active_profile_id()) or "Unknown"
+        self.set_status(f"Switched to profile: {profile_name}")
 
     def set_status(self, text: str) -> None:
         now = datetime.now().strftime("%H:%M")
@@ -151,6 +249,9 @@ class LanguageForgeWindow(QWidget):
             self.goals_view.refresh_current_month()
         elif widget is self.tracker_view and hasattr(self.tracker_view, "refresh_from_storage"):
             self.tracker_view.refresh_from_storage()
+        elif widget is self.settings_view and hasattr(self.settings_view, "_load_profile_list"):
+            # Refresh profile list to show current active profile
+            self.settings_view._load_profile_list()
 
     def show_radar_tab(self) -> None:
         index = self.tabs.indexOf(self.radar_view)
@@ -312,11 +413,12 @@ class LanguageForgeWindow(QWidget):
             f"}}"
             f"QComboBox::down-arrow {{"
             f"  image: none;"
-            f"  border-left: 4px solid transparent;"
-            f"  border-right: 4px solid transparent;"
-            f"  border-top: 5px solid {colors.text};"
+            f"  border-left: 5px solid transparent;"
+            f"  border-right: 5px solid transparent;"
+            f"  border-top: 6px solid {colors.input_text};"
             f"  width: 0px;"
             f"  height: 0px;"
+            f"  margin-right: 3px;"
             f"}}"
             f"QComboBox QAbstractItemView {{"
             f"  background-color: {colors.input_bg};"

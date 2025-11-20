@@ -119,6 +119,7 @@ class DashboardView(QWidget):
     def apply_theme(self, colors: 'ThemeColors') -> None:
         """Apply theme colors to dashboard components."""
         self._theme_colors = colors
+        self._current_theme_colors = colors  # Store for later reapplication
         
         # Update all section underlines
         for underline in self.findChildren(QFrame, "section_underline"):
@@ -274,6 +275,15 @@ class DashboardView(QWidget):
             self._weekly_consistency_label.setText(
                 f"This Week: {percent}% consistency — {active_days} active days"
             )
+        
+        # Also refresh daily plan tasks from storage
+        if hasattr(self, "_daily_plan_edits"):
+            plan = load_daily_plan()
+            for idx, edit in enumerate(self._daily_plan_edits):
+                if idx < len(plan.tasks):
+                    edit.setText(plan.tasks[idx] or "")
+                else:
+                    edit.setText("")
 
     # RADAR PREVIEW (Fluency Snapshot)
     def _create_radar_section(self) -> QFrame:
@@ -722,6 +732,9 @@ class DashboardView(QWidget):
         """Public hook: refresh the dashboard Resources preview from disk."""
 
         self._populate_resources_preview()
+        # Reapply theme to newly created Open buttons
+        if hasattr(self, '_current_theme_colors'):
+            self.apply_theme(self._current_theme_colors)
 
     # navigation helpers
     def _go_tracker(self) -> None:

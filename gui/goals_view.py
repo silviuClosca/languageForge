@@ -355,8 +355,8 @@ class GoalsView(QWidget):
                 edit.blockSignals(True)
                 edit.setText(str(s_text))
 
-                delete_btn = QPushButton("✕", self.subtasks_containers[i])
-                delete_btn.setFixedSize(24, 24)
+                delete_btn = QPushButton("🗑", self.subtasks_containers[i])
+                delete_btn.setFixedSize(26, 26)
                 delete_btn.setToolTip("Delete subtask")
                 delete_btn.setObjectName("subtask_delete_btn")
 
@@ -654,8 +654,8 @@ class GoalsView(QWidget):
         edit = QLineEdit(self.subtasks_containers[goal_index])
         edit.setPlaceholderText("New subtask…")
 
-        delete_btn = QPushButton("✕", self.subtasks_containers[goal_index])
-        delete_btn.setFixedSize(24, 24)
+        delete_btn = QPushButton("🗑", self.subtasks_containers[goal_index])
+        delete_btn.setFixedSize(26, 26)
         delete_btn.setToolTip("Delete subtask")
         delete_btn.setObjectName("subtask_delete_btn")
 
@@ -910,18 +910,17 @@ class GoalsView(QWidget):
         # Update all buttons
         for button in self.findChildren(QPushButton):
             if button.objectName() == "subtask_delete_btn":
-                # Style X delete buttons
+                # Style trash can delete buttons
                 button.setStyleSheet(
                     f"QPushButton {{"
                     f"  border: 1px solid #DC2626;"
-                    f"  border-radius: 3px;"
+                    f"  border-radius: 4px;"
                     f"  background-color: transparent;"
-                    f"  color: #DC2626;"
-                    f"  font-size: 16px;"
+                    f"  font-size: 14px;"
+                    f"  padding: 0px;"
                     f"}}"
                     f"QPushButton:hover {{"
-                    f"  background-color: rgba(220, 38, 38, 0.12);"
-                    f"  color: #B91C1C;"
+                    f"  background-color: #DC2626;"
                     f"  border-color: #B91C1C;"
                     f"}}"
                 )

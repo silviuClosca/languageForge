@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Dict, Any
 
 from .models import DailyPlan
-from .storage import load_json, save_json
+from .storage import load_profile_json, save_profile_json
 
 
 _FILENAME = "dailyplan.json"
@@ -17,7 +17,7 @@ def _default() -> Dict[str, Any]:
 
 
 def load_daily_plan() -> DailyPlan:
-    data = load_json(_FILENAME, _default())
+    data = load_profile_json(_FILENAME, _default())
     if not isinstance(data, dict):
         data = _default()
     # Backward compatibility: if legacy morning/afternoon/evening exist,
@@ -49,4 +49,4 @@ def load_daily_plan() -> DailyPlan:
 
 
 def save_daily_plan(plan: DailyPlan) -> None:
-    save_json(_FILENAME, plan.to_dict())
+    save_profile_json(_FILENAME, plan.to_dict())

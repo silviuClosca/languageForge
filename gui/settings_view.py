@@ -15,10 +15,22 @@ from aqt.qt import (
     Qt,
     QSpinBox,
     QComboBox,
+    QListWidget,
+    QPushButton,
+    QInputDialog,
+    QMessageBox,
 )
 
 from ..core.logic_settings import load_settings, save_settings, Settings
 from ..core.themes import get_all_theme_names, get_theme_display_name
+from ..core.logic_profiles import (
+    list_profiles,
+    create_profile,
+    delete_profile,
+    rename_profile,
+    get_active_profile_id,
+    MAX_PROFILE_NAME_LENGTH,
+)
 
 
 class SettingsView(QWidget):
@@ -77,11 +89,43 @@ class SettingsView(QWidget):
         startup_layout.addWidget(self.open_on_startup_checkbox)
 
         layout.addWidget(startup_group)
+
+        # Profile Management section -----------------------------------
+        profiles_group = QGroupBox("Profile Management", self)
+        profiles_layout = QVBoxLayout(profiles_group)
+        
+        profiles_desc = QLabel(
+            "Manage language profiles. Each profile has separate goals, "
+            "tracker data, and resources.",
+            profiles_group
+        )
+        profiles_desc.setWordWrap(True)
+        profiles_layout.addWidget(profiles_desc)
+        
+        # Profile list
+        self.profile_list = QListWidget(profiles_group)
+        self.profile_list.setMaximumHeight(150)
+        profiles_layout.addWidget(self.profile_list)
+        
+        # Profile buttons
+        profile_buttons = QHBoxLayout()
+        self.add_profile_btn = QPushButton("➕ Add Profile", profiles_group)
+        self.rename_profile_btn = QPushButton("✏️ Rename", profiles_group)
+        self.delete_profile_btn = QPushButton("🗑️ Delete", profiles_group)
+        
+        profile_buttons.addWidget(self.add_profile_btn)
+        profile_buttons.addWidget(self.rename_profile_btn)
+        profile_buttons.addWidget(self.delete_profile_btn)
+        profile_buttons.addStretch(1)
+        profiles_layout.addLayout(profile_buttons)
+        
+        layout.addWidget(profiles_group)
         layout.addStretch(1)
 
         # Wire up initial values & signals
         self._load_into_widgets()
         self._connect_signals()
+        self._load_profile_list()
 
     # -----------------------------------------------------------------
     # Internal helpers
@@ -123,6 +167,11 @@ class SettingsView(QWidget):
         self.theme_combo.currentIndexChanged.connect(self._on_theme_changed)
         self.font_spin.valueChanged.connect(self._on_font_size_changed)
         self.open_on_startup_checkbox.toggled.connect(self._on_open_on_startup_toggled)
+        
+        # Profile management signals
+        self.add_profile_btn.clicked.connect(self._on_add_profile)
+        self.rename_profile_btn.clicked.connect(self._on_rename_profile)
+        self.delete_profile_btn.clicked.connect(self._on_delete_profile)
 
     def _on_theme_changed(self, index: int) -> None:
         theme_names = get_all_theme_names()
@@ -143,6 +192,141 @@ class SettingsView(QWidget):
     def _apply_theme(self) -> None:
         if self._apply_theme_callback is not None:
             self._apply_theme_callback(self._settings)
+    
+    # -----------------------------------------------------------------
+    # Profile management
+    # -----------------------------------------------------------------
+    def _get_main_window(self):
+        """Find the main LanguageForgeWindow instance."""
+        # Walk up the parent chain to find the main window
+        widget = self
+        while widget is not None:
+            if hasattr(widget, '_populate_profile_combo'):
+                return widget
+            widget = widget.parent()
+        return None
+    
+    def _load_profile_list(self) -> None:
+        """Load all profiles into the list widget."""
+        self.profile_list.clear()
+        profiles = list_profiles()
+        active_id = get_active_profile_id()
+        
+        for profile in profiles:
+            profile_id = profile["id"]
+            display_name = profile.get("display_name", profile_id)
+            
+            # Mark active profile
+            if profile_id == active_id:
+                item_text = f"{display_name} ⭐ (active)"
+            else:
+                item_text = display_name
+            
+            self.profile_list.addItem(item_text)
+            # Store profile ID in item data
+            self.profile_list.item(self.profile_list.count() - 1).setData(
+                Qt.ItemDataRole.UserRole, profile_id
+            )
+    
+    def _on_add_profile(self) -> None:
+        """Handle adding a new profile."""
+        name, ok = QInputDialog.getText(
+            self,
+            "New Profile",
+            f"Profile name (max {MAX_PROFILE_NAME_LENGTH} chars):",
+        )
+        
+        if not ok or not name:
+            return
+        
+        success, message = create_profile(name.strip())
+        
+        if success:
+            self._load_profile_list()
+            # Refresh profile combo in main window
+            main_window = self._get_main_window()
+            if main_window:
+                main_window._populate_profile_combo()
+            QMessageBox.information(self, "Success", message)
+        else:
+            QMessageBox.warning(self, "Error", message)
+    
+    def _on_rename_profile(self) -> None:
+        """Handle renaming the selected profile."""
+        current_item = self.profile_list.currentItem()
+        if not current_item:
+            QMessageBox.warning(self, "No Selection", "Please select a profile to rename.")
+            return
+        
+        profile_id = current_item.data(Qt.ItemDataRole.UserRole)
+        current_display_name = list_profiles()
+        for p in current_display_name:
+            if p["id"] == profile_id:
+                current_display_name = p.get("display_name", profile_id)
+                break
+        
+        new_name, ok = QInputDialog.getText(
+            self,
+            "Rename Profile",
+            f"New name (max {MAX_PROFILE_NAME_LENGTH} chars):",
+            text=current_display_name,
+        )
+        
+        if not ok or not new_name:
+            return
+        
+        success, message = rename_profile(profile_id, new_name.strip())
+        
+        if success:
+            self._load_profile_list()
+            # Refresh profile combo in main window
+            main_window = self._get_main_window()
+            if main_window:
+                main_window._populate_profile_combo()
+            QMessageBox.information(self, "Success", message)
+        else:
+            QMessageBox.warning(self, "Error", message)
+    
+    def _on_delete_profile(self) -> None:
+        """Handle deleting the selected profile."""
+        current_item = self.profile_list.currentItem()
+        if not current_item:
+            QMessageBox.warning(self, "No Selection", "Please select a profile to delete.")
+            return
+        
+        profile_id = current_item.data(Qt.ItemDataRole.UserRole)
+        
+        # Get display name for confirmation
+        display_name = ""
+        for p in list_profiles():
+            if p["id"] == profile_id:
+                display_name = p.get("display_name", profile_id)
+                break
+        
+        # Confirm deletion
+        reply = QMessageBox.question(
+            self,
+            "Confirm Deletion",
+            f"Are you sure you want to delete the profile '{display_name}'?\n"
+            "This will permanently delete all goals, tracker data, and resources for this profile.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        success, message = delete_profile(profile_id)
+        
+        if success:
+            self._load_profile_list()
+            # Refresh profile combo in main window
+            main_window = self._get_main_window()
+            if main_window:
+                main_window._populate_profile_combo()
+            QMessageBox.information(self, "Success", message)
+        else:
+            QMessageBox.warning(self, "Error", message)
     
     def apply_theme(self, colors: 'ThemeColors') -> None:
         """Apply theme colors to settings view components."""

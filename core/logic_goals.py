@@ -4,7 +4,7 @@ from typing import Dict, List
 from datetime import datetime
 
 from .models import MonthlyGoals
-from .storage import load_json, save_json, get_data_dir
+from .storage import load_profile_json, save_profile_json
 
 
 # New storage filename for goals to avoid interference with any legacy
@@ -18,25 +18,9 @@ def _default() -> Dict[str, Dict]:
 
 
 def load_goals() -> Dict[str, Dict]:
-    """Load all goals from the new storage file.
-
-    On first run, if the new file does not exist but a legacy goals.json
-    does, migrate its contents into the new file and continue from there.
-    """
-
-    data_dir = get_data_dir()
-    new_path = data_dir / _FILENAME
-    legacy_path = data_dir / _LEGACY_FILENAME
-
-    # If the new file doesn't exist yet but the legacy one does, migrate.
-    if not new_path.exists() and legacy_path.exists():
-        legacy = load_json(_LEGACY_FILENAME, _default())
-        if isinstance(legacy, dict):
-            save_json(_FILENAME, legacy)
-
-    data = load_json(_FILENAME, _default())
+    data = load_profile_json(_FILENAME, {})
     if not isinstance(data, dict):
-        return _default()
+        return {}
     return data
 
 
@@ -137,16 +121,7 @@ def load_month_goals(month: str) -> MonthlyGoals:
     return load_goals_for_month(month)
 
 
-def save_goals_for_month(goals: MonthlyGoals, source: str | None = None) -> None:
-    """Persist a MonthlyGoals object back to goals.json.
-
-    To avoid accidental data loss on startup or from default objects, we do
-    not overwrite existing month data with an "effectively blank" object
-    (no titles, completions, reflections, subtasks, or notes). This guards
-    against code paths that construct a fresh MonthlyGoals for the current
-    month and save it immediately, which would otherwise wipe subtasks.
-    """
-
+def save_goals_for_month(goals: MonthlyGoals, source: str = "") -> None:
     data = load_goals()
     new_obj = goals.to_dict()
 
@@ -189,7 +164,7 @@ def save_goals_for_month(goals: MonthlyGoals, source: str | None = None) -> None
             return
 
     data[goals.month] = new_obj
-    save_json(_FILENAME, data)
+    save_profile_json(_FILENAME, data)
 
 
 def save_month_goals(goals: MonthlyGoals, source: str | None = None) -> None:
@@ -224,4 +199,4 @@ def auto_archive_past_goals(current_month_id: str) -> None:
                 data[month] = raw
                 changed = True
     if changed:
-        save_json(_FILENAME, data)
+        save_profile_json(_FILENAME, data)
